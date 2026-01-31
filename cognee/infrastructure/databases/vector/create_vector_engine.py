@@ -127,6 +127,20 @@ def create_vector_engine(
             embedding_engine=embedding_engine,
         )
 
+    elif vector_db_provider.lower() == "qdrant":
+        try:
+            from .qdrant.QdrantAdapter import QdrantAdapter
+        except ImportError:
+            raise ImportError(
+                "Qdrant dependencies are not installed. Please install with 'pip install qdrant-client' or 'pip install cognee[qdrant]'."
+            )
+
+        return QdrantAdapter(
+            url = vector_db_url,
+            api_key = vector_db_key,
+            embedding_engine = embedding_engine,
+        )
+
     elif vector_db_provider.lower() == "lancedb":
         from .lancedb.LanceDBAdapter import LanceDBAdapter
 

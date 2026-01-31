@@ -43,7 +43,7 @@ COPY alembic/ /app/alembic
 COPY ./cognee /app/cognee
 COPY ./distributed /app/distributed
 RUN --mount=type=cache,target=/root/.cache/uv \
-uv sync --extra debug --extra api --extra postgres --extra neo4j --extra llama-index --extra ollama --extra mistral --extra groq --extra anthropic --frozen --no-dev --no-editable
+    uv sync --extra debug --extra api --extra postgres --extra neo4j --extra llama-index --extra ollama --extra mistral --extra groq --extra anthropic --frozen --no-dev --no-editable
 
 FROM python:3.12-slim-bookworm
 
@@ -57,7 +57,7 @@ COPY --from=uv /app /app
 # COPY --from=uv /app/.venv /app/.venv
 # COPY --from=uv /root/.local /root/.local
 
-RUN chmod +x /app/entrypoint.sh
+RUN sed -i 's/\r$//' /app/entrypoint.sh && chmod +x /app/entrypoint.sh
 
 # Place executables in the environment at the front of the path
 ENV PATH="/app/.venv/bin:$PATH"
