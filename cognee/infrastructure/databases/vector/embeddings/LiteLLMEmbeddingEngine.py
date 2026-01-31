@@ -19,6 +19,9 @@ from cognee.infrastructure.databases.exceptions import EmbeddingException
 from cognee.infrastructure.llm.tokenizer.HuggingFace import (
     HuggingFaceTokenizer,
 )
+from cognee.infrastructure.llm.tokenizer.Remote import (
+    RemoteTokenizer,
+)
 from cognee.infrastructure.llm.tokenizer.Mistral import (
     MistralTokenizer,
 )
@@ -49,6 +52,8 @@ class LiteLLMEmbeddingEngine(EmbeddingEngine):
     model: str
     dimensions: int
     mock: bool
+    huggingface_tokenizer_name: Optional[str]
+    token_count_endpoint: Optional[str]
 
     MAX_RETRIES = 5
 
@@ -62,6 +67,8 @@ class LiteLLMEmbeddingEngine(EmbeddingEngine):
         api_version: str = None,
         max_completion_tokens: int = 512,
         batch_size: int = 100,
+        huggingface_tokenizer_name: str = None,
+        token_count_endpoint: str = None,
     ):
         self.api_key = api_key
         self.endpoint = endpoint
@@ -70,6 +77,8 @@ class LiteLLMEmbeddingEngine(EmbeddingEngine):
         self.model = model
         self.dimensions = dimensions
         self.max_completion_tokens = max_completion_tokens
+        self.huggingface_tokenizer_name = huggingface_tokenizer_name
+        self.token_count_endpoint = token_count_endpoint
         self.tokenizer = self.get_tokenizer()
         self.retry_count = 0
         self.batch_size = batch_size
@@ -110,9 +119,14 @@ class LiteLLMEmbeddingEngine(EmbeddingEngine):
                 response = {"data": [{"embedding": [0.0] * self.dimensions} for _ in text]}
                 return [data["embedding"] for data in response["data"]]
             else:
+                model = self.model
+
+                if self.provider == "custom" and "/" not in model:
+                    model = f"openai/{model}"
+
                 async with embedding_rate_limiter_context_manager():
                     response = await litellm.aembedding(
-                        model=self.model,
+                        model=model,
                         input=text,
                         api_key=self.api_key,
                         api_base=self.endpoint,
@@ -197,6 +211,22 @@ class LiteLLMEmbeddingEngine(EmbeddingEngine):
         logger.debug(f"Loading tokenizer for model {self.model}...")
         # If model also contains provider information, extract only model information
         model = self.model.split("/")[-1]
+
+        if self.token_count_endpoint:
+            return RemoteTokenizer(
+                endpoint=self.token_count_endpoint,
+                model=self.model # Use full model name if needed, or split model
+            )
+
+        if self.huggingface_tokenizer_name:
+            try:
+                tokenizer = HuggingFaceTokenizer(
+                    model=self.huggingface_tokenizer_name,
+                    max_completion_tokens=self.max_completion_tokens,
+                )
+                return tokenizer
+            except Exception as e:
+                logger.warning(f"Could not get tokenizer from HuggingFace for {self.huggingface_tokenizer_name} due to: {e}")
 
         if "openai" in self.provider.lower():
             tokenizer = TikTokenTokenizer(

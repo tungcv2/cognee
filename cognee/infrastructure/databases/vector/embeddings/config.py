@@ -21,6 +21,7 @@ class EmbeddingConfig(BaseSettings):
     embedding_max_completion_tokens: Optional[int] = 8191
     embedding_batch_size: Optional[int] = None
     huggingface_tokenizer: Optional[str] = None
+    token_count_endpoint: Optional[str] = None
     model_config = SettingsConfigDict(env_file=".env", extra="allow")
 
     def model_post_init(self, __context) -> None:
@@ -47,6 +48,7 @@ class EmbeddingConfig(BaseSettings):
             "embedding_api_version": self.embedding_api_version,
             "embedding_max_completion_tokens": self.embedding_max_completion_tokens,
             "huggingface_tokenizer": self.huggingface_tokenizer,
+            "token_count_endpoint": self.token_count_endpoint,
         }
 
 

@@ -33,6 +33,7 @@ def get_embedding_engine() -> EmbeddingEngine:
         config.embedding_api_version,
         config.embedding_batch_size,
         config.huggingface_tokenizer,
+        config.token_count_endpoint,
         llm_config.llm_api_key,
         llm_config.llm_provider,
     )
@@ -49,6 +50,7 @@ def create_embedding_engine(
     embedding_api_version,
     embedding_batch_size,
     huggingface_tokenizer,
+    token_count_endpoint,
     llm_api_key,
     llm_provider,
 ):
@@ -113,4 +115,6 @@ def create_embedding_engine(
         dimensions=embedding_dimensions,
         max_completion_tokens=embedding_max_completion_tokens,
         batch_size=embedding_batch_size,
+        huggingface_tokenizer_name=huggingface_tokenizer,
+        token_count_endpoint=token_count_endpoint,
     )
