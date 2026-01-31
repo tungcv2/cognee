@@ -193,16 +193,23 @@ class LLMConfig(BaseSettings):
             "EMBEDDING_PROVIDER": is_env_set("EMBEDDING_PROVIDER"),
             "EMBEDDING_MODEL": is_env_set("EMBEDDING_MODEL"),
             "EMBEDDING_DIMENSIONS": is_env_set("EMBEDDING_DIMENSIONS"),
-            "HUGGINGFACE_TOKENIZER": is_env_set("HUGGINGFACE_TOKENIZER"),
         }
-        if any(embedding_env_vars.values()) and not all(embedding_env_vars.values()):
-            missing_embed = [key for key, is_set in embedding_env_vars.items() if not is_set]
-            raise ValueError(
-                "You have set some but not all of the required environment variables "
-                "for embeddings (EMBEDDING_PROVIDER, EMBEDDING_MODEL, "
-                "EMBEDDING_DIMENSIONS, HUGGINGFACE_TOKENIZER). Missing: "
-                f"{missing_embed}"
-            )
+
+        has_tokenizer = is_env_set("HUGGINGFACE_TOKENIZER") or is_env_set("TOKEN_COUNT_ENDPOINT")
+
+        if any(embedding_env_vars.values()) or has_tokenizer:
+            missing_vars = [key for key, is_set in embedding_env_vars.items() if not is_set]
+            
+            if not has_tokenizer:
+                missing_vars.append("HUGGINGFACE_TOKENIZER or TOKEN_COUNT_ENDPOINT")
+
+            if len(missing_vars) > 0:
+                raise ValueError(
+                    "You have set some but not all of the required environment variables "
+                    "for embeddings (EMBEDDING_PROVIDER, EMBEDDING_MODEL, "
+                    "EMBEDDING_DIMENSIONS, HUGGINGFACE_TOKENIZER or TOKEN_COUNT_ENDPOINT). "
+                    f"Missing: {missing_vars}"
+                )
 
         return self
 
