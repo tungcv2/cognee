@@ -1,163 +1,107 @@
 services:
-  cognee:
-    container_name: cognee
-    networks:
-      - cognee-network
-    build:
-      context: .
-      dockerfile: Dockerfile
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: qdrant
+    restart: unless-stopped
+    # ports:
+    #   - "6333:6333"
+    #   - "6334:6334"
+    # environment:
+    #   # Bảo vệ Qdrant bằng API key
+    #   QDRANT__SERVICE__API_KEY: "${VECTOR_DB_KEY}"
     volumes:
-      - ./cognee:/app/cognee
-      - .env:/app/.env
-    environment:
-      - DEBUG=false # Change to true if debugging
-      - HOST=0.0.0.0
-      - ENVIRONMENT=local
-      - LOG_LEVEL=INFO
-    extra_hosts:
-      # Allows the container to reach your local machine using "host.docker.internal" instead of "localhost"
-      - "host.docker.internal:host-gateway"
-    ports:
-      - 8000:8000
-      - 5678:5678 # Debugger port
-    deploy:
-      resources:
-        limits:
-          cpus: "4.0"
-          memory: 8GB
-
-  # Cognee MCP Server - Model Context Protocol server for IDE integration
-  cognee-mcp:
-    container_name: cognee-mcp
-    profiles:
-      - mcp
-    networks:
-      - cognee-network
-    build:
-      context: .
-      dockerfile: cognee-mcp/Dockerfile
-    volumes:
-      - .env:/app/.env
-    environment:
-      - DEBUG=false # Change to true if debugging
-      - ENVIRONMENT=local
-      - LOG_LEVEL=INFO
-      - TRANSPORT_MODE=sse
-      # Database configuration - should match the main cognee service
-      - DB_PROVIDER=${DB_PROVIDER:-sqlite}
-      - DB_HOST=${DB_HOST:-host.docker.internal}
-      - DB_PORT=${DB_PORT:-5432}
-      - DB_NAME=${DB_NAME:-cognee_db}
-      - DB_USERNAME=${DB_USERNAME:-cognee}
-      - DB_PASSWORD=${DB_PASSWORD:-cognee}
-      # MCP specific configuration
-      - MCP_LOG_LEVEL=INFO
-      - PYTHONUNBUFFERED=1
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    ports:
-      - "8000:8000" # MCP port
-      - "5678:5678" # MCP debugger port
-    deploy:
-      resources:
-        limits:
-          cpus: "2.0"
-          memory: 4GB
-
-  # NOTE: Frontend is a work in progress and supports minimum amount of features required to be functional.
-  # If you want to use Cognee with a UI environment you can integrate the Cognee MCP Server into Cursor / Claude Desktop / Visual Studio Code (through Cline/Roo)
-  frontend:
-    container_name: frontend
-    profiles:
-        - ui
-    build:
-      context: ./cognee-frontend
-      dockerfile: Dockerfile
-    volumes:
-      - ./cognee-frontend/src:/app/src
-      - ./cognee-frontend/public:/app/public
-    ports:
-      - 3000:3000
-      # - 9229:9229 # Debugging
+      - ./docker-datas/qdrant_data:/qdrant/storage
     networks:
       - cognee-network
 
+  # 2. Graph Database: Lưu trữ thực thể và mối quan hệ
   neo4j:
     image: neo4j:latest
     container_name: neo4j
-    profiles:
-      - neo4j
+    restart: unless-stopped
     ports:
-      - 7474:7474
-      - 7687:7687
+      - "${NEO4J_WEB_PORT:-60911}:7474" # Giao diện Web (Neo4j Browser)
+      - "${NEO4J_BOLT_PORT:-60913}:7687" # Neo4j Bolt port
     environment:
-      - NEO4J_AUTH=neo4j/pleaseletmein
-      - NEO4J_PLUGINS=["apoc", "graph-data-science"]
-    networks:
-      - cognee-network
-
-  chromadb:
-    image: chromadb/chroma:0.6.3
-    container_name: chromadb
-    profiles:
-      - chromadb
-    environment:
-      - IS_PERSISTENT=TRUE
-      - CHROMA_SERVER_AUTH_CREDENTIALS=${VECTOR_DB_KEY}
-      - CHROMA_SERVER_AUTH_CREDENTIALS_PROVIDER=chromadb.auth.token.TokenConfigServerAuthCredentialsProvider
-      - CHROMA_SERVER_AUTH_TOKEN_TRANSPORT_HEADER=AUTHORIZATION
-      - CHROMA_SERVER_AUTH_PROVIDER=chromadb.auth.token.TokenAuthServerProvider
+      - NEO4J_AUTH=${GRAPH_DATABASE_USERNAME:-neo4j}/${GRAPH_DATABASE_PASSWORD:-Chamchi123}
+      - NEO4J_PLUGINS=["apoc"] # Hỗ trợ các thuật toán đồ thị nâng cao
     volumes:
-      - .chromadb_data/:/chroma/chroma/
-    networks:
-      - cognee-network
-    ports:
-      - "3002:8000"
-
-  postgres:
-    image: pgvector/pgvector:pg17
-    container_name: postgres
-    profiles:
-      - postgres
-    environment:
-      POSTGRES_USER: cognee
-      POSTGRES_PASSWORD: cognee
-      POSTGRES_DB: cognee_db
-      # - postgres_data:/var/lib/postgresql/data
-    ports:
-      - 5432:5432
+      - ./docker-datas/neo4j_data:/data
+      - ./docker-datas/neo4j_logs:/logs
     networks:
       - cognee-network
 
   redis:
     image: redis:7-alpine
     container_name: redis
-    profiles:
-      - redis
+    restart: unless-stopped
     ports:
-      - "6379:6379"
-    networks:
-      - cognee-network
+      - "${REDIS_PORT:-6379}:6379"
     volumes:
-      - redis_data:/data
-    command: [ "redis-server", "--appendonly", "yes" ]
-
-
-  redisinsight:
-    image: redislabs/redisinsight:latest
-    container_name: redisinsight
-    restart: always
-    ports:
-      - "5540:5540"
+      - ./docker-datas/redis_data:/data
     networks:
       - cognee-network
 
+  postgres:
+    image: postgres:16-alpine
+    container_name: postgres
+    restart: unless-stopped
+    ports:
+      - "${POSTGRES_PORT:-60912}:5432"
+    environment:
+      - POSTGRES_DB=${DB_NAME:-cognee_db}
+      - POSTGRES_USER=${DB_USERNAME:-cognee}
+      - POSTGRES_PASSWORD=${DB_PASSWORD:-cognee}
+    volumes:
+      - ./docker-datas/postgres_data:/var/lib/postgresql/data
+    networks:
+      - cognee-network
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U ${DB_USERNAME:-cognee} -d ${DB_NAME:-cognee_db}" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  cognee:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: cognee
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      # Persist Cognee system/data to writable volumes (avoid sqlite "unable to open database file").
+      SYSTEM_ROOT_DIRECTORY: "/cognee_system"
+      DATA_ROOT_DIRECTORY: "/cognee_data"
+      # Multi-user access control can break with some DB providers; keep it off for local/dev.
+      ENABLE_BACKEND_ACCESS_CONTROL: "${ENABLE_BACKEND_ACCESS_CONTROL:-false}"
+      # Disable Cognee auth for local/dev (the SP-Canon API talks to Cognee server-to-server).
+      REQUIRE_AUTHENTICATION: "false"
+      REQUIRE_AUTH: "false"
+    depends_on:
+      qdrant:
+        condition: service_started
+      neo4j:
+        condition: service_started
+      redis:
+        condition: service_started
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: [ "CMD-SHELL", "exit 0" ]
+      start_period: 60s
+    ports:
+      - "${COGNEE_API_PORT:-60910}:8000"
+    volumes:
+      - ./docker-datas/cognee_system:/cognee_system
+      - ./docker-datas/cognee_data:/cognee_data
+    command: >
+      uvicorn cognee.api.client:app --host 0.0.0.0 --port 8000
+    networks:
+      - cognee-network
 
 networks:
   cognee-network:
-    name: cognee-network
-
-volumes:
-  chromadb_data:
-  postgres_data:
-  redis_data:
+    driver: bridge

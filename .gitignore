@@ -1,3 +1,4 @@
+docker-datas/
 .data
 .env
 .local.env
